@@ -1,10 +1,10 @@
 #include "voxel_mesh.h"
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
-#include <GL/gl.h>
-#include <GL/gl.h>
+#include "gl_compat.h"
+#include "gl_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -593,5 +593,5 @@ void VoxelMesh_DrawPlayerBillboard(float wx, float wy, float wz, float camX, flo
     glDisable(GL_BLEND);
 }
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2

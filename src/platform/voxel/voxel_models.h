@@ -2,9 +2,9 @@
 #define VOXEL_MODELS_H
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
-#include <GL/gl.h>
+#include "gl_compat.h"
 
 extern GLuint gVoxelModels[1024];
 

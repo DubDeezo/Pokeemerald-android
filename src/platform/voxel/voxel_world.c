@@ -1,7 +1,7 @@
 #include "voxel_world.h"
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
 #include "global.h"
 #include "field_player_avatar.h"
@@ -288,5 +288,5 @@ VoxelVisualShape VoxelWorld_ClassifyTile(int worldX, int worldY)
     return VOXEL_SHAPE_FLAT;
 }
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2

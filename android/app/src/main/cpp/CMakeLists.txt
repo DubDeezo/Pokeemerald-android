@@ -89,4 +89,4 @@ target_compile_options(main PRIVATE
     -Wno-implicit-function-declaration
     "SHELL:-iquote '${ROOT}/include'"
     "SHELL:-iquote '${ROOT}/gflib'")
-target_link_libraries(main PRIVATE SDL2::SDL2 m)
+target_link_libraries(main PRIVATE SDL2::SDL2 m GLESv2 log)

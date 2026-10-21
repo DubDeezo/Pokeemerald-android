@@ -2,10 +2,10 @@
 #define GUARD_VOXEL_STRUCTURE_H
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
 #include <stdbool.h>
-#include <GL/gl.h>
+#include "gl_compat.h"
 #include "voxel_world.h"
 
 #define MAX_VOXEL_STRUCTURES 256
@@ -40,7 +40,7 @@ void VoxelStructure_RenderAll(GLuint atlasTex);
 // Check if a tile belongs to any structure
 bool VoxelStructure_IsTileInStructure(int worldX, int worldY);
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2
 
 #endif // GUARD_VOXEL_STRUCTURE_H

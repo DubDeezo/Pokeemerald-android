@@ -38,6 +38,14 @@ public final class GbaControlsView extends View {
     private Bitmap border;
     private int pressed;
 
+    // Two-finger camera gesture (3D overworld): orbit with a drag, zoom with a pinch.
+    private static final float YAW_DEGREES_PER_PIXEL = 0.2f;
+    private static final float PITCH_DEGREES_PER_PIXEL = 0.15f;
+    private boolean gestureActive;
+    private float lastCenterX;
+    private float lastCenterY;
+    private float lastSpread;
+
     public GbaControlsView(Context context) {
         super(context);
         setBackgroundColor(Color.TRANSPARENT);
@@ -156,7 +164,47 @@ public final class GbaControlsView extends View {
             }
         }
         setPressed(next);
+        handleCameraGesture(event, next);
         return true;
+    }
+
+    // Asked every time: the renderer can fall back to 2D after start-up if the
+    // GL context cannot be created, so the answer is not cached.
+    private boolean isVoxelMode() {
+        return isVoxelModeNative() == 1;
+    }
+
+    // Only when two fingers are on the screen and neither is holding a control,
+    // so playing with the d-pad and buttons never moves the camera.
+    private void handleCameraGesture(MotionEvent event, int controlsPressed) {
+        boolean twoFingers = isVoxelMode()
+                && controlsPressed == 0
+                && event.getPointerCount() == 2
+                && event.getActionMasked() != MotionEvent.ACTION_POINTER_UP
+                && event.getActionMasked() != MotionEvent.ACTION_UP;
+        if (!twoFingers) {
+            gestureActive = false;
+            return;
+        }
+
+        float x0 = event.getX(0);
+        float y0 = event.getY(0);
+        float x1 = event.getX(1);
+        float y1 = event.getY(1);
+        float centerX = (x0 + x1) / 2f;
+        float centerY = (y0 + y1) / 2f;
+        float spread = (float) Math.hypot(x1 - x0, y1 - y0);
+
+        if (gestureActive && lastSpread > 1f && spread > 1f) {
+            float zoomFactor = lastSpread / spread; // fingers apart -> closer camera
+            voxelCameraGesture(-(centerX - lastCenterX) * YAW_DEGREES_PER_PIXEL,
+                               (centerY - lastCenterY) * PITCH_DEGREES_PER_PIXEL,
+                               zoomFactor);
+        }
+        gestureActive = true;
+        lastCenterX = centerX;
+        lastCenterY = centerY;
+        lastSpread = spread;
     }
 
     private void drawControl(Canvas canvas, int control, String label) {
@@ -212,11 +260,16 @@ public final class GbaControlsView extends View {
 
     private static native int getBorderBackground();
     private static native int getPlatformSetting(int setting);
+    private static native int isVoxelModeNative();
+    private static native void voxelCameraGesture(float dYaw, float dPitch, float zoomFactor);
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        drawBorder(canvas);
+        // The 3D overworld fills the whole screen, so the 2D border art stays off.
+        if (!isVoxelMode()) {
+            drawBorder(canvas);
+        }
         drawControl(canvas, UP, null);
         drawControl(canvas, DOWN, null);
         drawControl(canvas, LEFT, null);

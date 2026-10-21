@@ -1,11 +1,10 @@
 #include "voxel_camera.h"
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
 #include <math.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
+#include "gl_compat.h"
 #include "voxel_world.h"
 
 void VoxelCamera_Init(VoxelCamera *cam)
@@ -20,6 +19,7 @@ void VoxelCamera_Init(VoxelCamera *cam)
     cam->yaw = 0.0f;
     cam->distance = 9.0f;
     cam->fov = 35.0f; // Tighter framing
+    cam->zoom = 1.0f;
 }
 
 void VoxelCamera_Update(VoxelCamera *cam, float playerWorldX, float playerWorldZ)
@@ -50,7 +50,7 @@ void VoxelCamera_Update(VoxelCamera *cam, float playerWorldX, float playerWorldZ
     float baseDist = 8.0f;
     float mapScale = (float)(mapW > mapH ? mapW : mapH) * 0.2f;
     if (mapScale > 5.0f) mapScale = 5.0f;
-    cam->distance = baseDist + mapScale;
+    cam->distance = (baseDist + mapScale) * cam->zoom;
 
     float pitchRad = cam->pitch * (3.14159265f / 180.0f);
     float yawRad   = cam->yaw   * (3.14159265f / 180.0f);
@@ -77,6 +77,21 @@ void VoxelCamera_ApplyView(const VoxelCamera *cam)
     gluLookAt(cam->x, cam->y, cam->z,
               cam->targetX, cam->targetY, cam->targetZ,
               0.0f, 1.0f, 0.0f);
+}
+
+void VoxelCamera_AdjustView(VoxelCamera *cam, float dYaw, float dPitch, float zoomFactor)
+{
+    cam->yaw += dYaw;
+    cam->pitch += dPitch;
+    cam->zoom *= zoomFactor;
+
+    // Keep the view readable and the d-pad directions roughly matching the screen.
+    if (cam->yaw > 45.0f) cam->yaw = 45.0f;
+    if (cam->yaw < -45.0f) cam->yaw = -45.0f;
+    if (cam->pitch > 75.0f) cam->pitch = 75.0f;
+    if (cam->pitch < 20.0f) cam->pitch = 20.0f;
+    if (cam->zoom > 1.8f) cam->zoom = 1.8f;
+    if (cam->zoom < 0.5f) cam->zoom = 0.5f;
 }
 
 void VoxelCamera_FPSMouseMotion(VoxelCamera *cam, int dx, int dy)
@@ -112,5 +127,5 @@ void VoxelCamera_FPSTick(VoxelCamera *cam, float forward, float right, float up)
     cam->y += up * speed;
 }
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2

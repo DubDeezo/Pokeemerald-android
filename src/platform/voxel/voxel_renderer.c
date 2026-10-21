@@ -1,7 +1,7 @@
 #include "voxel_renderer.h"
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,8 +10,12 @@
 #include "fieldmap.h"
 #include "palette.h"
 #include "decompress.h"
-#include <GL/gl.h>
+#include "gl_compat.h"
+#ifdef __ANDROID__
+#include <SDL.h>
+#else
 #include <SDL2/SDL.h>
+#endif
 #include "voxel_world.h"
 #include "voxel_camera.h"
 #include "voxel_mesh.h"
@@ -20,6 +24,34 @@
 
 // Will be defined in sdl2.c
 extern SDL_Window *sdlWindow;
+
+// The GBA picture is 240x160 (3:2). Fit it inside the window without stretching
+// and centre it; used for the 2D screens and for the UI drawn over the 3D world.
+static void SetGbaViewport(int winW, int winH)
+{
+    int w = winW;
+    int h = winW * 2 / 3;
+    if (h > winH) {
+        h = winH;
+        w = winH * 3 / 2;
+    }
+    glViewport((winW - w) / 2, (winH - h) / 2, w, h);
+}
+
+// Camera adjustments requested from another thread (Android touch overlay).
+// Written by the UI thread, consumed by the render thread.
+static SDL_SpinLock sTouchLock;
+static float sTouchYaw, sTouchPitch;
+static float sTouchZoom = 1.0f;
+
+void VoxelRenderer_TouchCamera(float dYaw, float dPitch, float zoomFactor)
+{
+    SDL_AtomicLock(&sTouchLock);
+    sTouchYaw += dYaw;
+    sTouchPitch += dPitch;
+    sTouchZoom *= zoomFactor;
+    SDL_AtomicUnlock(&sTouchLock);
+}
 
 static GLuint sVoxelAtlasTex = 0;
 static const struct MapLayout *sLastMapLayout = NULL;
@@ -447,7 +479,9 @@ void VoxelRenderer_RenderFrame(void)
         int winW, winH;
         SDL_GL_GetDrawableSize(sdlWindow, &winW, &winH);
         glViewport(0, 0, winW, winH);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        SetGbaViewport(winW, winH);
 
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
@@ -478,6 +512,7 @@ void VoxelRenderer_RenderFrame(void)
         glEnd();
 
         glFlush();
+        glcFlushBatch();
         SDL_GL_SwapWindow(sdlWindow);
 
         // Any time we fall back to 2D we want a camera snap on next 3D frame
@@ -581,6 +616,20 @@ void VoxelRenderer_RenderFrame(void)
     }
 
     // ---- We update object sprite textures below in the main drawing loop ----
+
+    // ---- Touch camera adjustments (Android) ----
+    {
+        float dYaw, dPitch, zoom;
+        SDL_AtomicLock(&sTouchLock);
+        dYaw = sTouchYaw;
+        dPitch = sTouchPitch;
+        zoom = sTouchZoom;
+        sTouchYaw = sTouchPitch = 0.0f;
+        sTouchZoom = 1.0f;
+        SDL_AtomicUnlock(&sTouchLock);
+        if (!gVoxelFirstPersonMode && (dYaw != 0.0f || dPitch != 0.0f || zoom != 1.0f))
+            VoxelCamera_AdjustView(&sCamera, dYaw, dPitch, zoom);
+    }
 
     // ---- Camera smooth-follow ----
     if (gVoxelFirstPersonMode) {
@@ -764,7 +813,9 @@ void VoxelRenderer_RenderFrame(void)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 240, 160, 0, GL_RGBA, GL_UNSIGNED_BYTE, uiImage);
 
-    // Setup 2D ortho projection for UI
+    // Setup 2D ortho projection for UI, drawn in a centred 3:2 area so text
+    // boxes are not stretched on wide screens.
+    SetGbaViewport(winW, winH);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0.0, 1.0, 1.0, 0.0, -1.0, 1.0);
@@ -783,6 +834,7 @@ void VoxelRenderer_RenderFrame(void)
     glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 1.0f);
     glEnd();
 
+    glcFlushBatch();
     SDL_GL_SwapWindow(sdlWindow);
 }
 
@@ -811,5 +863,5 @@ bool VoxelRenderer_Init(void)
     return true;
 }
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2

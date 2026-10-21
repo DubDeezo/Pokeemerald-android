@@ -17,11 +17,13 @@
 #endif
 #ifdef NATIVE_LINUX
 #include <SDL2/SDL_image.h>
+#endif
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 #include "voxel/voxel_renderer.h"
 #endif
 #include "mods/mod_manager.h"
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 bool gVoxelModeEnabled = false;
 #endif
 #endif
@@ -118,6 +120,9 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef __ANDROID__
+    // The 3D overworld is the default on Android; if the GL ES context or the
+    // renderer cannot be created the game falls back to the classic 2D view.
+    gVoxelModeEnabled = true;
     SDL_setenv("SDL_AUDIODRIVER", "openslES", 1);
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
@@ -169,7 +174,18 @@ int main(int argc, char **argv)
 #endif
     sdlWindow = SDL_CreateWindow("Pokemon Emerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, windowFlags);
 #else
-    sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, DISPLAY_WIDTH * videoScale, DISPLAY_HEIGHT * videoScale, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    Uint32 windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+#ifdef __ANDROID__
+    if (gVoxelModeEnabled) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+        windowFlags |= SDL_WINDOW_OPENGL;
+    }
+#endif
+    sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, DISPLAY_WIDTH * videoScale, DISPLAY_HEIGHT * videoScale, windowFlags);
 #endif
     if (sdlWindow == NULL)
     {
@@ -177,7 +193,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
     SDL_GLContext glContext = NULL;
     if (gVoxelModeEnabled) {
         glContext = SDL_GL_CreateContext(sdlWindow);
@@ -188,10 +204,32 @@ int main(int argc, char **argv)
             printf("[Voxel] Renderer init failed, falling back to classic\n");
             gVoxelModeEnabled = false;
         }
+#ifdef __ANDROID__
+        else {
+            SDL_GL_SetSwapInterval(1);
+        }
+        if (!gVoxelModeEnabled) {
+            // A window that owns a GL context cannot also host an SDL_Renderer
+            // reliably, so start over with a plain window for the 2D path.
+            if (glContext != NULL) {
+                SDL_GL_DeleteContext(glContext);
+                glContext = NULL;
+            }
+            SDL_DestroyWindow(sdlWindow);
+            sdlWindow = SDL_CreateWindow("pokeemerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                         DISPLAY_WIDTH * videoScale, DISPLAY_HEIGHT * videoScale,
+                                         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+            if (sdlWindow == NULL)
+            {
+                DBGPRINTF("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+                return 1;
+            }
+        }
+#endif
     }
 #endif
 
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
     if (!gVoxelModeEnabled)
     {
 #endif
@@ -205,7 +243,7 @@ int main(int argc, char **argv)
         DBGPRINTF("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
         return 1;
     }
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
     } // end if (!gVoxelModeEnabled)
 #endif
 
@@ -346,6 +384,9 @@ int main(int argc, char **argv)
     else if (gVoxelModeEnabled)
         REG_VCOUNT = 161;
 #endif
+#else
+    if (gVoxelModeEnabled)
+        REG_VCOUNT = 161;
 #endif
     mainLoopThread = SDL_CreateThread(DoMain, "AgbMain", NULL);
 
@@ -375,7 +416,7 @@ int main(int argc, char **argv)
             {
                 if (SDL_AtomicGet(&isFrameAvailable))
                 {
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
                     if (gVoxelModeEnabled) {
                         VoxelRenderer_RenderFrame();
                     } else
@@ -487,6 +528,8 @@ int main(int argc, char **argv)
 
 #ifdef NATIVE_LINUX
     IMG_Quit();
+#endif
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
     if (gVoxelModeEnabled) {
         VoxelRenderer_Shutdown();
     }
@@ -709,6 +752,21 @@ void Platform_SetSetting(enum PlatformSetting setting, u8 value)
 JNIEXPORT jint JNICALL Java_com_pokeemerald_experimental_GbaControlsView_getBorderBackground(JNIEnv *env, jclass clazz)
 {
     return Platform_GetBorderBackground();
+}
+
+// Tells the Java touch overlay whether the 3D overworld renderer is active, so
+// it can skip the 2D border art that would otherwise cover the 3D view.
+JNIEXPORT jint JNICALL Java_com_pokeemerald_experimental_GbaControlsView_isVoxelModeNative(JNIEnv *env, jclass clazz)
+{
+    return gVoxelModeEnabled ? 1 : 0;
+}
+
+// Two-finger gesture from the overlay: orbit (yaw/pitch degrees) and pinch zoom.
+JNIEXPORT void JNICALL Java_com_pokeemerald_experimental_GbaControlsView_voxelCameraGesture(
+    JNIEnv *env, jclass clazz, jfloat dYaw, jfloat dPitch, jfloat zoomFactor)
+{
+    if (gVoxelModeEnabled)
+        VoxelRenderer_TouchCamera(dYaw, dPitch, zoomFactor);
 }
 
 JNIEXPORT jint JNICALL Java_com_pokeemerald_experimental_GbaControlsView_getPlatformSetting(JNIEnv *env, jclass clazz, jint setting)

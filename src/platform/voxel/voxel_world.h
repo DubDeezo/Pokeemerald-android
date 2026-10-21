@@ -2,7 +2,7 @@
 #define GUARD_VOXEL_WORLD_H
 
 #ifdef PLATFORM_SDL2
-#ifdef NATIVE_LINUX
+#if defined(NATIVE_LINUX) || defined(__ANDROID__)
 
 #include <stdbool.h>
 
@@ -63,6 +63,6 @@ void VoxelWorld_GetPlayerWorldCoords(float *wx, float *wz);
 // Get player facing direction (DIR_SOUTH=1, DIR_NORTH=2, DIR_WEST=3, DIR_EAST=4)
 int VoxelWorld_GetPlayerFacingDirection(void);
 
-#endif // NATIVE_LINUX
+#endif // NATIVE_LINUX || __ANDROID__
 #endif // PLATFORM_SDL2
 #endif // GUARD_VOXEL_WORLD_H

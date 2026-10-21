@@ -1,0 +1,59 @@
+name: Android APK
+
+# Builds the debug APK on GitHub's servers so no local Android toolchain is
+# needed. Run it from the Actions tab ("Run workflow") or push to a branch that
+# touches the Android project or the platform layer, then download the
+# `pokeemerald-android-debug` artifact from the finished run.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+      - 'src/platform/**'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (with SDL2 submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "ndk;26.3.11579264" "cmake;3.22.1" "build-tools;36.0.0"
+
+      - name: Install ARM assembler/linker for the game data
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-arm-none-eabi gcc-arm-none-eabi libpng-dev
+
+      - name: Build the preprocessor tool used by the CMake build
+        run: make -C tools/preproc
+
+      - name: Apply the SDL2 Android lifecycle patch
+        run: git -C android/SDL2 apply ../patches/sdl2-android-lifecycle.patch
+
+      - name: Build debug APK
+        run: android/SDL2/android-project/gradlew -p android :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokeemerald-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
