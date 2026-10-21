@@ -44,6 +44,27 @@ jobs:
       - name: Build the preprocessor tool used by the CMake build
         run: make -C tools/preproc
 
+      - name: Generate map headers, graphics and audio assets
+        run: |
+          set -e
+          make -f make_tools.mk -j"$(nproc)"
+          make -f Makefile_pc generated -j"$(nproc)"
+          # MIDI songs -> assembly (the CMake build globs these at configure time)
+          make -f Makefile_pc -j"$(nproc)" $(ls sound/songs/midi/*.mid | sed 's/\.mid$/.s/')
+          # Everything the .s and .c files embed (INCBIN): graphics, palettes, samples
+          {
+            for f in data/*.s sound/songs/*.s sound/songs/midi/*.s; do
+              tools/scaninc/scaninc -I include -I . "$f"
+            done
+            find src -name '*.c' ! -name '*.inc.c' | while read -r f; do
+              tools/scaninc/scaninc -I include -I gflib "$f"
+            done
+          } | sort -u | grep -v '^$' > /tmp/asset_deps.txt
+          while read -r d; do [ -e "$d" ] || echo "$d"; done < /tmp/asset_deps.txt > /tmp/asset_missing.txt
+          echo "Generating $(wc -l < /tmp/asset_missing.txt) missing asset files"
+          xargs -n 400 make -f Makefile_pc -j"$(nproc)" < /tmp/asset_missing.txt
+          while read -r d; do [ -e "$d" ] || { echo "STILL MISSING: $d"; exit 1; }; done < /tmp/asset_deps.txt
+
       - name: Apply the SDL2 Android lifecycle patch
         run: git -C android/SDL2 apply --unidiff-zero ../patches/sdl2-android-lifecycle.patch
 
