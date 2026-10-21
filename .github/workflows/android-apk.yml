@@ -45,7 +45,7 @@ jobs:
         run: make -C tools/preproc
 
       - name: Apply the SDL2 Android lifecycle patch
-        run: git -C android/SDL2 apply ../patches/sdl2-android-lifecycle.patch
+        run: git -C android/SDL2 apply --unidiff-zero ../patches/sdl2-android-lifecycle.patch
 
       - name: Build debug APK
         run: android/SDL2/android-project/gradlew -p android :app:assembleDebug --stacktrace
