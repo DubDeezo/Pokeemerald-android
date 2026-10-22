@@ -65,6 +65,7 @@ static bool sMatricesInit = false;
 static bool sTextureEnabled = false;
 static bool sAlphaTestEnabled = false;
 static float sAlphaRef = 0.5f;
+static float sTint[3] = { 1.0f, 1.0f, 1.0f };   // multiplies every fragment (day/night)
 
 static GLuint sProgram = 0;
 static GLint sLocMvp = -1;
@@ -72,6 +73,7 @@ static GLint sLocTex = -1;
 static GLint sLocUseTex = -1;
 static GLint sLocAlphaTest = -1;
 static GLint sLocAlphaRef = -1;
+static GLint sLocTint = -1;
 static GLint sLocPos = -1;
 static GLint sLocUV = -1;
 static GLint sLocColor = -1;
@@ -157,6 +159,7 @@ static const char *kFragmentSrc =
     "uniform float uUseTex;\n"
     "uniform float uAlphaTest;\n"
     "uniform float uAlphaRef;\n"
+    "uniform vec3 uTint;\n"
     "varying vec2 vUV;\n"
     "varying vec4 vColor;\n"
     "void main() {\n"
@@ -165,6 +168,7 @@ static const char *kFragmentSrc =
     "        c *= texture2D(uTex, vUV);\n"
     "    if (uAlphaTest > 0.5 && c.a <= uAlphaRef)\n"
     "        discard;\n"
+    "    c.rgb *= uTint;\n"
     "    gl_FragColor = c;\n"
     "}\n";
 
@@ -226,6 +230,7 @@ static bool EnsureProgram(void)
     sLocUseTex = glGetUniformLocation(program, "uUseTex");
     sLocAlphaTest = glGetUniformLocation(program, "uAlphaTest");
     sLocAlphaRef = glGetUniformLocation(program, "uAlphaRef");
+    sLocTint = glGetUniformLocation(program, "uTint");
     sLocPos = glGetAttribLocation(program, "aPos");
     sLocUV = glGetAttribLocation(program, "aUV");
     sLocColor = glGetAttribLocation(program, "aColor");
@@ -253,6 +258,7 @@ void glcFlushBatch(void)
         glUniform1f(sLocUseTex, sTextureEnabled ? 1.0f : 0.0f);
         glUniform1f(sLocAlphaTest, sAlphaTestEnabled ? 1.0f : 0.0f);
         glUniform1f(sLocAlphaRef, sAlphaRef);
+        glUniform3f(sLocTint, sTint[0], sTint[1], sTint[2]);
 
         const GLsizei stride = sizeof(Vertex);
         const Vertex *base = sBatch.data;
@@ -269,6 +275,15 @@ void glcFlushBatch(void)
         glDisableVertexAttribArray(sLocColor);
     }
     sBatch.count = 0;
+}
+
+void glcSetTint(GLfloat r, GLfloat g, GLfloat b)
+{
+    // Geometry queued so far must be drawn with the old tint.
+    glcFlushBatch();
+    sTint[0] = r;
+    sTint[1] = g;
+    sTint[2] = b;
 }
 
 void glcFlush(void)

@@ -68,6 +68,10 @@ void glcDepthFunc(GLenum func);
 void glcViewport(GLint x, GLint y, GLsizei w, GLsizei h);
 void glcClear(GLbitfield mask);
 
+// Colour multiplied into everything drawn afterwards (1,1,1 = unchanged).
+// Used for the day/night tint of the 3D world.
+void glcSetTint(GLfloat r, GLfloat g, GLfloat b);
+
 // Draw anything still batched. Call before swapping buffers.
 void glcFlushBatch(void);
 void glcFlush(void);

@@ -19,6 +19,7 @@
 #include "voxel_world.h"
 #include "voxel_camera.h"
 #include "voxel_mesh.h"
+#include "voxel_daynight.h"
 #include "field_player_avatar.h"
 #include "constants/global.h"
 
@@ -483,6 +484,9 @@ void VoxelRenderer_RenderFrame(void)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         SetGbaViewport(winW, winH);
 
+#ifdef __ANDROID__
+        glcSetTint(1.0f, 1.0f, 1.0f);
+#endif
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
         glDisable(GL_BLEND);
@@ -660,9 +664,18 @@ void VoxelRenderer_RenderFrame(void)
     glEnable(GL_ALPHA_TEST);
     glAlphaFunc(GL_GREATER, 0.5f);
 
-    // Set a sky blue background color instead of black
+    // Sky colour; on Android it follows the time of day and the world is tinted to match.
+#ifdef __ANDROID__
+    float dnTint[3], dnSky[3];
+    VoxelDayNight_Get(dnTint, dnSky);
+    glClearColor(dnSky[0], dnSky[1], dnSky[2], 1.0f);
+#else
     glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
+#endif
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#ifdef __ANDROID__
+    glcSetTint(dnTint[0], dnTint[1], dnTint[2]);
+#endif
 
     VoxelCamera_ApplyProjection(&sCamera, winW, winH);
     VoxelCamera_ApplyView(&sCamera);
@@ -771,6 +784,11 @@ void VoxelRenderer_RenderFrame(void)
                                           sObjectEventTex[i], sObjectEventW[i], sObjectEventH[i]);
         }
     }
+
+#ifdef __ANDROID__
+    // The text boxes and menus drawn over the world keep their own colours.
+    glcSetTint(1.0f, 1.0f, 1.0f);
+#endif
 
     // ---- 2D UI Overlay ----
     extern void DrawFrame(uint16_t *pixels);
