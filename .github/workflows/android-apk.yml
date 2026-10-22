@@ -49,8 +49,12 @@ jobs:
           set -e
           make -f make_tools.mk -j"$(nproc)"
           make -f Makefile_pc generated -j"$(nproc)"
+          # Per-map header.inc / events.inc / connections.inc used by data/maps.s and data/map_events.s
+          make -f Makefile_pc -j"$(nproc)" $(ls data/maps/*/map.json | sed -e 's#map\.json$#header.inc#') $(ls data/maps/*/map.json | sed -e 's#map\.json$#events.inc#') $(ls data/maps/*/map.json | sed -e 's#map\.json$#connections.inc#')
           # MIDI songs -> assembly (the CMake build globs these at configure time)
           make -f Makefile_pc -j"$(nproc)" $(ls sound/songs/midi/*.mid | sed 's/\.mid$/.s/')
+          # Per-map header/events/connections include files used by data/maps.s and data/map_events.s
+          make -f Makefile_pc -j"$(nproc)" $(for m in data/maps/*/map.json; do d=$(dirname "$m"); echo "$d/header.inc $d/events.inc $d/connections.inc"; done)
           # Everything the .s and .c files embed (INCBIN): graphics, palettes, samples
           {
             for f in data/*.s sound/songs/*.s sound/songs/midi/*.s; do
@@ -64,6 +68,20 @@ jobs:
           echo "Generating $(wc -l < /tmp/asset_missing.txt) missing asset files"
           xargs -n 400 make -f Makefile_pc -j"$(nproc)" < /tmp/asset_missing.txt
           while read -r d; do [ -e "$d" ] || { echo "STILL MISSING: $d"; exit 1; }; done < /tmp/asset_deps.txt
+          # The CMake build assembles these through a pipeline that hides preprocessor
+          # failures (a missing include silently truncates the output), so check here.
+          for f in data/*.s; do
+            tools/preproc/preproc "$f" charmap.txt > /dev/null || { echo "PREPROC FAILED: $f"; exit 1; }
+          done
+          # preproc only warns (and truncates its output) when an included file is missing,
+          # which later shows up as undefined symbols at link time. Fail early instead.
+          for f in data/*.s; do
+            tools/preproc/preproc "$f" charmap.txt | cpp -I include -DMODERN=1 -DPORTABLE -DUBFIX 2>/dev/null \
+              | tools/preproc/preproc -ie "$f" charmap.txt 2>/tmp/preproc_err.txt >/dev/null
+            if grep -q "Failed to open" /tmp/preproc_err.txt; then
+              echo "preproc could not read an included file while processing $f:"; cat /tmp/preproc_err.txt; exit 1
+            fi
+          done
 
       - name: Apply the SDL2 Android lifecycle patch
         run: git -C android/SDL2 apply --unidiff-zero ../patches/sdl2-android-lifecycle.patch
